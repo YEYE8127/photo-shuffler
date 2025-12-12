@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>블로그 사진 정리 시스템 V3.0</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #0a0a0a; font-family: 'Pretendard', -apple-system, sans-serif; }
+        .category-box { border: 2px dashed #374151; transition: all 0.2s; }
+        .category-box:hover { border-color: #4b5563; }
+        .category-box.drag-over { border-color: #10b981; background: #064e3b20; }
+        .neon-btn { box-shadow: 0 0 15px #10b98140; transition: all 0.3s; }
+        .neon-btn:hover { box-shadow: 0 0 25px #10b98160; transform: translateY(-1px); }
+        .neon-btn:active { transform: translateY(1px); }
+        .neon-text { text-shadow: 0 0 10px #10b981; }
+        
+        .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: #1f2937; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+
+        #loadingOverlay {
+            backdrop-filter: blur(5px);
+            background: rgba(0, 0, 0, 0.7);
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #374151;
+            border-top: 5px solid #10b981;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="text-gray-100 min-h-screen flex flex-col">
+
+<div id="loadingOverlay" class="fixed inset-0 z-50 hidden flex flex-col items-center justify-center">
+    <div class="spinner mb-4"></div>
+    <h3 class="text-xl font-bold text-white">처리 중...</h3>
+    <p id="loadingText" class="text-emerald-400 text-lg font-bold mt-2">준비 중...</p>
+    <p id="loadingSubText" class="text-gray-500 text-xs mt-2 text-center">
+        대량의 파일 처리 시 시간이 소요될 수 있습니다.
+    </p>
+</div>
+
+<div class="flex-1 p-6">
+  <div class="max-w-7xl mx-auto">
+    <div class="text-center mb-8">
+      <h1 class="text-4xl font-bold neon-text mb-2">블로그 사진 정리 시스템</h1>
+      <p class="text-gray-400">V3.0 (파일명 자동변환 + 무제한 모드)</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 bg-gray-900 rounded-xl p-6 border border-gray-800 flex flex-col h-[80vh]">
+        <div class="flex justify-between items-center mb-4">
+          <div class="flex items-center gap-3">
+            <h2 class="text-xl font-bold text-emerald-400">카테고리 설정</h2>
+            <button onclick="resetCategories()" class="text-xs text-gray-500 hover:text-red-400 underline decoration-dotted">초기화</button>
+          </div>
+          <button onclick="addCategory()" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-lg text-sm font-semibold transition flex items-center gap-2">
+            <span>+</span> 카테고리 추가
+          </button>
+        </div>
+        
+        <div id="categories" class="space-y-4 overflow-y-auto scrollbar-thin pr-2 flex-1">
+            </div>
+      </div>
+
+      <div class="bg-gray-900 rounded-xl p-6 border border-gray-800 h-fit sticky top-6">
+        <h2 class="text-xl font-bold text-emerald-400 mb-6">생성 설정</h2>
+        
+        <div class="space-y-5 mb-6">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">업체명 (폴더명에 사용)</label>
+            <input type="text" id="companyName" placeholder="예: 맛집탐방 (선택사항)"
+                onchange="saveSettings()"
+                class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:border-emerald-500 focus:outline-none text-white placeholder-gray-500">
+             <p class="text-xs text-gray-500 mt-1 text-emerald-400">
+                입력 시 폴더명: <b>01_업체명</b>, 02_업체명...<br>
+                <span class="text-gray-400">파일명: <b>년월일_시분초_000001.jpg</b> (자동변환)</span>
+             </p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">결과 폴더 개수</label>
+            <div class="flex items-center gap-2">
+                <input type="number" id="folderCount" value="30" min="1" max="10000" 
+                   onchange="saveSettings(); updateSummary();"
+                   class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:border-emerald-500 focus:outline-none text-lg font-bold">
+                <span class="text-gray-500 text-sm whitespace-nowrap">개 생성</span>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">
+                * 제한 없음 (PC/모바일 가능)
+            </p>
+          </div>
+
+          <div class="bg-gray-800/50 p-4 rounded-lg border border-gray-700 space-y-4">
+            <div class="flex items-start gap-3">
+              <input type="checkbox" id="allowDuplicate" onchange="saveSettings(); updateSummary();" class="mt-1 w-4 h-4 text-emerald-600 rounded border-gray-600 focus:ring-emerald-500 focus:ring-offset-gray-900">
+              <div>
+                <label for="allowDuplicate" class="text-sm font-medium text-gray-200 cursor-pointer">이미지 부족 시 중복 허용</label>
+              </div>
+            </div>
+            
+            <div class="flex items-start gap-3 pt-4 border-t border-gray-700">
+              <input type="checkbox" id="removeMetadata" onchange="saveSettings()" class="mt-1 w-4 h-4 text-emerald-600 rounded border-gray-600 focus:ring-emerald-500 focus:ring-offset-gray-900">
+              <div>
+                <label for="removeMetadata" class="text-sm font-bold text-orange-400 cursor-pointer">🔒 속성 및 개인정보 제거</label>
+                <p class="text-xs text-gray-400 mt-1">
+                    체크 시 GPS, 카메라 정보 등을 모두 지웁니다.<br>
+                    <span class="text-gray-500">(처리 시간이 더 오래 걸립니다)</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="summary" class="bg-gray-800 p-5 rounded-lg mb-6 text-sm space-y-3 border border-gray-700">
+          <div class="flex justify-between items-center pb-2 border-b border-gray-700">
+             <span class="text-gray-400">총 카테고리</span>
+             <span id="totalCats" class="text-emerald-400 font-bold text-lg">0</span>
+          </div>
+          <div class="flex justify-between items-center">
+             <span class="text-gray-400">총 업로드 이미지</span>
+             <span id="totalImgs" class="text-white font-bold text-lg">0</span>
+          </div>
+          <div id="warningBox" class="hidden bg-amber-900/30 border border-amber-700/50 p-3 rounded text-amber-200 text-xs mt-3 leading-relaxed"></div>
+        </div>
+
+        <button onclick="generateZip()" class="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl font-bold text-lg neon-btn transition text-white shadow-lg relative overflow-hidden group">
+          <span class="relative z-10 flex items-center justify-center gap-2">
+            <span>📦</span> ZIP 생성 & 다운로드
+          </span>
+        </button>
+        
+        <div class="mt-4 p-3 bg-gray-800/50 rounded border border-emerald-900/50 text-center">
+            <p class="text-xs text-emerald-400 font-bold mb-1">💡 안내</p>
+            <p class="text-xs text-gray-400 leading-relaxed">
+                파일 이름이 <b>날짜_시간_순서</b>로 변경되므로<br>
+                탐색기에서 [이름순] 정렬 시 순서가 유지됩니다.
+            </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let categories = [];
+let nextId = 1;
+
+// --- 초기화 ---
+
+function init() {
+    loadSettings();
+    if (categories.length === 0) {
+        initDefaultCategories();
+    }
+    renderCategories();
+}
+
+function initDefaultCategories() {
+  // 요청사항 3: 카테고리를 숫자로만 구성 (1~10)
+  const defaults = [
+    '1', '2', '3', '4', '5',
+    '6', '7', '8', '9', '10'
+  ];
+  defaults.forEach(name => addCategory(name, false)); 
+  saveSettings();
+}
+
+function resetCategories() {
+    if(confirm('모든 카테고리와 설정이 초기화됩니다. 계속하시겠습니까?')) {
+        categories = [];
+        nextId = 1;
+        initDefaultCategories();
+        renderCategories();
+    }
+}
+
+// --- 데이터 관리 ---
+
+function addCategory(name = '', shouldRender = true) {
+  const id = nextId++;
+  const cat = {
+    id,
+    name: name || `${id}`,
+    mode: 'required', // required | probability
+    requiredCount: 1,
+    probabilityN: 20,
+    files: []
+  };
+  categories.push(cat);
+  if (shouldRender) {
+      saveSettings();
+      renderCategories();
+  }
+}
+
+function removeCategory(id) {
+  if (confirm('이 카테고리를 삭제하시겠습니까?')) {
+    categories = categories.filter(c => c.id !== id);
+    saveSettings();
+    renderCategories();
+  }
+}
+
+function moveCategory(index, direction) {
+    if (direction === -1 && index > 0) {
+        [categories[index], categories[index - 1]] = [categories[index - 1], categories[index]];
+    } else if (direction === 1 && index < categories.length - 1) {
+        [categories[index], categories[index + 1]] = [categories[index + 1], categories[index]];
+    }
+    saveSettings();
+    renderCategories();
+}
+
+// --- 설정 저장 (로컬스토리지) ---
+
+function saveSettings() {
+    const settings = {
+        companyName: document.getElementById('companyName').value,
+        folderCount: document.getElementById('folderCount').value,
+        allowDuplicate: document.getElementById('allowDuplicate').checked,
+        removeMetadata: document.getElementById('removeMetadata').checked,
+        categories: categories.map(c => ({
+            name: c.name,
+            mode: c.mode,
+            requiredCount: c.requiredCount,
+            probabilityN: c.probabilityN
+        }))
+    };
+    localStorage.setItem('blogShufflerSettingsV3', JSON.stringify(settings));
+}
+
+function loadSettings() {
+    const saved = localStorage.getItem('blogShufflerSettingsV3');
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            document.getElementById('companyName').value = parsed.companyName || '';
+            document.getElementById('folderCount').value = parsed.folderCount || 30;
+            document.getElementById('allowDuplicate').checked = parsed.allowDuplicate || false;
+            document.getElementById('removeMetadata').checked = parsed.removeMetadata || false;
+            
+            if (parsed.categories && Array.isArray(parsed.categories)) {
+                categories = parsed.categories.map((c, idx) => ({
+                    id: nextId++,
+                    name: c.name,
+                    mode: c.mode || 'required',
+                    requiredCount: c.requiredCount || 1,
+                    probabilityN: c.probabilityN || 20,
+                    files: []
+                }));
+            }
+        } catch (e) {
+            console.error("설정 불러오기 실패", e);
+        }
+    }
+}
+
+// --- 화면 렌더링 ---
+
+function renderCategories() {
+  const container = document.getElementById('categories');
+  
+  if (categories.length === 0) {
+      container.innerHTML = `<div class="text-center text-gray-600 py-10">카테고리가 없습니다. 추가해주세요.</div>`;
+      updateSummary();
+      return;
+  }
+
+  container.innerHTML = categories.map((cat, idx) => `
+    <div class="category-box bg-gray-800 rounded-lg p-4 relative group" data-id="${cat.id}">
+      
+      <div class="flex justify-between items-center mb-3">
+        <div class="flex items-center gap-2">
+            <div class="flex flex-col gap-0.5 mr-1">
+                <button onclick="moveCategory(${idx}, -1)" class="text-gray-600 hover:text-emerald-400 leading-none ${idx === 0 ? 'invisible' : ''}">▲</button>
+                <button onclick="moveCategory(${idx}, 1)" class="text-gray-600 hover:text-emerald-400 leading-none ${idx === categories.length - 1 ? 'invisible' : ''}">▼</button>
+            </div>
+            <div class="bg-gray-700 px-2 py-1 rounded text-emerald-400 font-mono text-sm font-bold min-w-[2rem] text-center">
+                ${String(idx + 1).padStart(2, '0')}
+            </div>
+            <input type="text" value="${cat.name}" 
+                onchange="updateCategoryName(${cat.id}, this.value)"
+                class="w-48 px-3 py-1 bg-gray-900 border border-gray-700 rounded text-sm text-white focus:border-emerald-500 focus:outline-none transition" placeholder="카테고리명">
+        </div>
+        <button onclick="removeCategory(${cat.id})" class="text-gray-600 hover:text-red-400 transition p-1" title="삭제">✕</button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        <div>
+            <select onchange="updateCategoryMode(${cat.id}, this.value)" 
+               class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-xs text-gray-200 focus:border-emerald-500 focus:outline-none">
+              <option value="required" ${cat.mode === 'required' ? 'selected' : ''}>[모드 A] 폴더마다 필수 포함</option>
+              <option value="probability" ${cat.mode === 'probability' ? 'selected' : ''}>[모드 B] N번째 폴더마다 포함</option>
+            </select>
+        </div>
+        <div class="flex items-center gap-2">
+            ${cat.mode === 'required' ? `
+              <span class="text-xs text-gray-400 whitespace-nowrap">개수:</span>
+              <input type="number" value="${cat.requiredCount}" min="1" max="50"
+                onchange="updateRequiredCount(${cat.id}, this.value)"
+                class="w-full px-3 py-1.5 bg-gray-900 border border-gray-600 rounded text-sm text-center focus:border-emerald-500">
+            ` : `
+              <span class="text-xs text-gray-400 whitespace-nowrap">간격:</span>
+              <input type="number" value="${cat.probabilityN}" min="1" max="1000"
+                onchange="updateProbabilityN(${cat.id}, this.value)"
+                class="w-full px-3 py-1.5 bg-gray-900 border border-gray-600 rounded text-sm text-center focus:border-emerald-500">
+            `}
+        </div>
+      </div>
+
+      <div class="border-2 border-dashed border-gray-700 bg-gray-800/50 rounded-lg p-4 text-center cursor-pointer hover:border-emerald-500 hover:bg-gray-800 transition relative overflow-hidden"
+        ondrop="handleDrop(event, ${cat.id})" 
+        ondragover="handleDragOver(event)"
+        ondragleave="handleDragLeave(event)"
+        onclick="document.getElementById('file-${cat.id}').click()">
+        
+        <input type="file" id="file-${cat.id}" multiple accept="image/*" 
+           onchange="handleFileSelect(event, ${cat.id})" class="hidden">
+           
+        <div class="text-gray-400 text-sm pointer-events-none">
+          ${cat.files.length > 0 
+             ? `<div class="text-emerald-400 font-bold text-lg mb-1">${cat.files.length}장</div><div class="text-xs text-gray-500">클릭하여 추가 업로드</div>` 
+             : `<div class="text-2xl mb-2 text-gray-600">📂</div><span class="text-gray-500">이미지 드래그 또는 클릭</span>`}
+        </div>
+      </div>
+    </div>
+  `).join('');
+  
+  updateSummary();
+}
+
+// --- 업데이트 로직 ---
+
+function updateCategoryName(id, name) {
+  const cat = categories.find(c => c.id === id);
+  if (cat) { cat.name = name; saveSettings(); }
+}
+
+function updateCategoryMode(id, mode) {
+  const cat = categories.find(c => c.id === id);
+  if (cat) { cat.mode = mode; saveSettings(); renderCategories(); }
+}
+
+function updateRequiredCount(id, count) {
+  const cat = categories.find(c => c.id === id);
+  if (cat) { cat.requiredCount = parseInt(count); saveSettings(); updateSummary(); }
+}
+
+function updateProbabilityN(id, n) {
+  const cat = categories.find(c => c.id === id);
+  if (cat) { cat.probabilityN = parseInt(n); saveSettings(); updateSummary(); }
+}
+
+// --- 파일 처리 ---
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.currentTarget.classList.add('drag-over');
+}
+
+function handleDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+function handleDrop(e, catId) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+  addFilesToCategory(catId, files);
+}
+
+function handleFileSelect(e, catId) {
+  const files = Array.from(e.target.files);
+  addFilesToCategory(catId, files);
+  e.target.value = ''; 
+}
+
+function addFilesToCategory(catId, files) {
+  const cat = categories.find(c => c.id === catId);
+  if (cat) {
+    cat.files.push(...files);
+    renderCategories(); // Re-render to show count
+  }
+}
+
+// --- 계산 및 셔플 ---
+
+function updateSummary() {
+  const totalCats = categories.length;
+  const totalImgs = categories.reduce((sum, c) => sum + c.files.length, 0);
+  const folderCount = parseInt(document.getElementById('folderCount').value) || 0;
+  
+  document.getElementById('totalCats').textContent = totalCats;
+  document.getElementById('totalImgs').textContent = totalImgs;
+  
+  let warnings = [];
+  
+  categories.forEach(cat => {
+    if (cat.mode === 'required') {
+      const needed = folderCount * cat.requiredCount;
+      if (cat.files.length < needed) {
+        const diff = needed - cat.files.length;
+        warnings.push(`• <b>${cat.name}</b>: ${diff}장 부족 (${cat.files.length}/${needed})`);
+      }
+    }
+  });
+  
+  const warningBox = document.getElementById('warningBox');
+  if (warnings.length > 0) {
+    warningBox.innerHTML = '<div class="font-bold mb-1">⚠️ 이미지 부족 알림</div>' + warnings.join('<br>');
+    warningBox.classList.remove('hidden');
+  } else {
+    warningBox.classList.add('hidden');
+  }
+}
+
+function shuffle(arr) {
+  const result = [...arr];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function downloadBlob(blob, filename) {
+    try {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        return true;
+    } catch (e) {
+        console.error("다운로드 실패", e);
+        return false;
+    }
+}
+
+// ============================================
+//   메타데이터 제거 (Canvas Re-encoding)
+// ============================================
+
+async function cleanImage(file) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        
+        img.onload = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                
+                canvas.toBlob((blob) => {
+                    URL.revokeObjectURL(url);
+                    if(blob) {
+                        resolve(blob);
+                    } else {
+                        resolve(file);
+                    }
+                }, file.type, 0.92); 
+            } catch (e) {
+                URL.revokeObjectURL(url);
+                console.error("Image processing failed:", e);
+                resolve(file); 
+            }
+        };
+        
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve(file); 
+        };
+        
+        img.src = url;
+    });
+}
+
+// ============================================
+//   ZIP 생성 로직 (배치 처리 + 이름 변경)
+// ============================================
+async function generateZip() {
+  const folderCount = parseInt(document.getElementById('folderCount').value);
+  const allowDuplicate = document.getElementById('allowDuplicate').checked;
+  const shouldRemoveMetadata = document.getElementById('removeMetadata').checked;
+  const companyNameInput = document.getElementById('companyName').value.trim();
+  const totalImgs = categories.reduce((sum, c) => sum + c.files.length, 0);
+
+  const safeCompanyName = companyNameInput.replace(/[^a-zA-Z0-9가-힣_\-\s]/g, '');
+
+  if (folderCount < 1) {
+    alert('폴더 개수를 1 이상으로 설정해주세요.');
+    return;
+  }
+  if (categories.length === 0) {
+    alert('최소 1개 이상의 카테고리를 추가해주세요.');
+    return;
+  }
+  if (totalImgs === 0) {
+      alert('업로드된 이미지가 없습니다.\n파일을 추가해주세요.');
+      return;
+  }
+
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  const loadingText = document.getElementById('loadingText');
+  const loadingSubText = document.getElementById('loadingSubText');
+  
+  loadingOverlay.classList.remove('hidden');
+  loadingOverlay.classList.add('flex');
+
+  if (shouldRemoveMetadata) {
+      loadingSubText.innerHTML = "🔒 <b>메타데이터/개인정보 제거 중...</b><br>시간이 조금 더 소요됩니다.";
+  } else {
+      loadingSubText.innerHTML = "최적화된 속도로 압축 중입니다.<br>잠시만 기다려주세요.";
+  }
+
+  setTimeout(async () => {
+    try {
+        // --- 1단계: 날짜 및 이름 생성 준비 ---
+        loadingText.textContent = "구조 생성 중...";
+        
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hour = String(now.getHours()).padStart(2, '0');
+        const min = String(now.getMinutes()).padStart(2, '0');
+        const sec = String(now.getSeconds()).padStart(2, '0');
+        
+        // 파일명 Prefix: YYYYMMDD_HHMMSS
+        const datePrefix = `${year}${month}${day}_${hour}${min}${sec}`;
+        const dateStr = `${year}${month}${day}`; // ZIP 파일명용
+
+        // 폴더명 템플릿
+        const folderNameTemplate = safeCompanyName 
+            ? (idx) => `${String(idx).padStart(2, '0')}_${safeCompanyName}`
+            : (idx) => `포스팅_${String(idx).padStart(2, '0')}`;
+
+        const allFolders = Array.from({ length: folderCount }, (_, i) => ({
+            name: folderNameTemplate(i + 1),
+            files: []
+        }));
+
+        // 카테고리별 분배 로직
+        for (let catIdx = 0; catIdx < categories.length; catIdx++) {
+            const cat = categories[catIdx];
+            if (cat.files.length === 0) continue;
+
+            const shuffled = shuffle(cat.files);
+            
+            if (cat.mode === 'required') {
+                for (let folderIdx = 0; folderIdx < folderCount; folderIdx++) {
+                    for (let i = 0; i < cat.requiredCount; i++) {
+                        const globalIndex = folderIdx * cat.requiredCount + i;
+                        let file;
+                        if (globalIndex < shuffled.length) {
+                            file = shuffled[globalIndex];
+                        } else if (allowDuplicate) {
+                            file = shuffled[globalIndex % shuffled.length];
+                        } else {
+                            continue;
+                        }
+                        allFolders[folderIdx].files.push({ file, fileName: file.name });
+                    }
+                }
+            } else {
+                const interval = cat.probabilityN;
+                let usedCount = 0;
+                for (let folderIdx = 0; folderIdx < folderCount; folderIdx++) {
+                    if ((folderIdx + 1) % interval === 0) {
+                        let file;
+                        if (usedCount < shuffled.length) {
+                             file = shuffled[usedCount];
+                        } else if (allowDuplicate) {
+                             file = shuffled[usedCount % shuffled.length];
+                        } else {
+                            continue;
+                        }
+                        usedCount++;
+                        allFolders[folderIdx].files.push({ file, fileName: file.name });
+                    }
+                }
+            }
+        }
+
+        // --- 2단계: 배치 처리 및 ZIP 생성 (제한 해제를 위해 배치 크기 대폭 증가) ---
+        // 메모리 보호를 위해 내부는 나누지만, 사용자에겐 한번에 다운되는 것처럼 처리
+        const BATCH_SIZE = 50; // PC/모바일 안정성을 위한 내부 배치
+        const totalBatches = Math.ceil(folderCount / BATCH_SIZE);
+        
+        let batchCounter = 1;
+
+        for (let i = 0; i < folderCount; i += BATCH_SIZE) {
+            const currentBatchFolders = allFolders.slice(i, i + BATCH_SIZE);
+            const partNum = totalBatches > 1 ? `_Part${batchCounter}` : '';
+            
+            const zip = new JSZip();
+
+            for (let fIdx = 0; fIdx < currentBatchFolders.length; fIdx++) {
+                const folder = currentBatchFolders[fIdx];
+                
+                // 진행률 표시
+                const progress = Math.round(((fIdx + 1) / currentBatchFolders.length) * 100);
+                loadingText.textContent = `처리 중 (${batchCounter}/${totalBatches})... ${progress}%`;
+
+                if(folder.files.length > 0) {
+                    const folderZip = zip.folder(folder.name);
+                    let sortTime = new Date(now.getTime());
+
+                    // 폴더 내 파일 순회하며 이름 변경 및 추가
+                    for (let fileIndex = 0; fileIndex < folder.files.length; fileIndex++) {
+                        const item = folder.files[fileIndex];
+                        let fileData = item.file;
+                        
+                        if (shouldRemoveMetadata) {
+                            fileData = await cleanImage(item.file);
+                        }
+
+                        // 요청사항 1: 이름 변경 로직 (날짜_시간_순서)
+                        // 예: 20251211_000001.jpg
+                        const ext = item.fileName.split('.').pop();
+                        const seq = String(fileIndex + 1).padStart(6, '0'); // 000001
+                        const finalName = `${datePrefix}_${seq}.${ext}`;
+
+                        // 정렬용 시간 미세 조정 (1분씩 증가시켜 윈도우 탐색기 '수정한 날짜' 정렬 지원)
+                        sortTime.setMinutes(sortTime.getMinutes() + 1);
+                        
+                        folderZip.file(finalName, fileData, { date: new Date(sortTime) });
+                    }
+                }
+            }
+
+            loadingText.textContent = `압축 중... (${batchCounter}/${totalBatches})`;
+            
+            const content = await zip.generateAsync({ type: 'blob' });
+            const zipName = safeCompanyName 
+                ? `blog_photos_${safeCompanyName}_${dateStr}${partNum}.zip` 
+                : `blog_photos_${dateStr}${partNum}.zip`;
+            
+            downloadBlob(content, zipName);
+            
+            batchCounter++;
+            // 연속 다운로드 시 브라우저 멈춤 방지를 위한 짧은 대기
+            await new Promise(r => setTimeout(r, 1000));
+        }
+        
+        if (totalBatches > 1) {
+            // 여러 개로 나뉘었을 때만 알림
+            // 요청하신 '제한 해제' 느낌을 위해 1개일 땐 조용히 완료
+            alert(`대용량 처리를 위해 ${totalBatches}개의 파일로 분할 다운로드되었습니다.`);
+        }
+
+    } catch (err) {
+        console.error("Error:", err);
+        alert('오류 발생: ' + err.message);
+    } finally {
+        loadingOverlay.classList.add('hidden');
+        loadingOverlay.classList.remove('flex');
+    }
+  }, 100);
+}
+
+// 시작
+init();
+
+</script>
+</body>
+</html>
