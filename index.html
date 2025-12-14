@@ -94,7 +94,7 @@
              <p class="text-xs text-gray-500 mt-1 text-emerald-400">
                 입력 시 폴더명: <b>업체명01</b>, 업체명02...<br>
                 <!-- UPDATED HINT TEXT -->
-                <span class="text-gray-400">파일명: <b>년월일_시분01.jpg</b> (자동변환)</span>
+                <span class="text-gray-400">파일명: <b>년월일_시폴더순서사진순서.jpg</b> (자동변환)</span>
              </p>
           </div>
 
@@ -599,12 +599,11 @@ async function generateZip() {
             const year = now.getFullYear();
             const month = String(now.getMonth() + 1).padStart(2, '0');
             const day = String(now.getDate()).padStart(2, '0');
-            const hour = String(now.getHours()).padStart(2, '0');
-            const min = String(now.getMinutes()).padStart(2, '0');
+            const hourPart = String(now.getHours()).padStart(2, '0'); // HH
             
-            // 파일명 Prefix: YYYYMMDD_HHMM (12자리)
-            const datePrefix = `${year}${month}${day}_${hour}${min}`; 
-            const dateStr = `${year}${month}${day}`; // ZIP 파일명용
+            // 파일명에 사용될 YYYYMMDD
+            const datePart = `${year}${month}${day}`; 
+            const dateStr = datePart; // ZIP 파일명용 YYYYMMDD
 
             // 폴더명 템플릿
             // 로직: 업체명01, 업체명02...
@@ -667,7 +666,6 @@ async function generateZip() {
 
             for (let i = 0; i < folderCount; i += BATCH_SIZE) {
                 const currentBatchFolders = allFolders.slice(i, i + BATCH_SIZE);
-                const partNum = totalBatches > 1 ? `_Part${batchCounter}` : '';
                 
                 const zip = new JSZip();
                 const baseTime = new Date(); // 기준 시간 설정
@@ -682,6 +680,10 @@ async function generateZip() {
                     if(folder.files.length > 0) {
                         const folderZip = zip.folder(folder.name);
                         
+                        // 현재 폴더 번호 (FF) 계산
+                        const actualFolderIndex = i + fIdx + 1;
+                        const paddedFolderIndex = String(actualFolderIndex).padStart(2, '0'); // FF
+                        
                         // 폴더 내 파일 순회하며 이름 변경 및 추가
                         for (let fileIndex = 0; fileIndex < folder.files.length; fileIndex++) {
                             const item = folder.files[fileIndex];
@@ -691,10 +693,13 @@ async function generateZip() {
                                 fileData = await cleanImage(item.file);
                             }
 
-                            // 파일명: YYYYMMDD_HHMM01.ext (요청사항 반영: 순서 앞에 언더바 제거)
+                            // 파일명: YYYYMMDD_HHFFPP.ext (요청사항 반영)
                             const ext = item.fileName.split('.').pop();
-                            const seq = String(fileIndex + 1).padStart(2, '0'); // 2자리 순서
-                            const finalName = `${datePrefix}${seq}.${ext}`; // 언더바 제거됨
+                            const seq = String(fileIndex + 1).padStart(2, '0'); // PP (2자리 순서)
+                            
+                            // YYYYMMDD + _ + HH + FF + PP + .ext
+                            const indexPart = `${hourPart}${paddedFolderIndex}${seq}`; // HHFFPP
+                            const finalName = `${datePart}_${indexPart}.${ext}`; 
 
                             // 순차적인 파일 정렬을 위해 메타데이터 시간(ZIP date)을 1초씩 증가
                             const sortTime = new Date(baseTime.getTime() + (fileIndex * 1000));
@@ -707,9 +712,18 @@ async function generateZip() {
                 loadingText.textContent = `압축 중... (${batchCounter}/${totalBatches})`;
                 
                 const content = await zip.generateAsync({ type: 'blob' });
-                const zipName = safeCompanyName 
-                    ? `blog_photos_${safeCompanyName}_${dateStr}${partNum}.zip` 
-                    : `blog_photos_${dateStr}${partNum}.zip`;
+
+                // ZIP 파일 이름 변경 로직: 업체명_년월일_순서 (파일이 여러개일때만)
+                const sequentialSuffix = totalBatches > 1 ? `_${batchCounter}` : '';
+                
+                let zipName;
+                if (safeCompanyName) {
+                    // Format: 업체명_년월일_순서.zip
+                    zipName = `${safeCompanyName}_${dateStr}${sequentialSuffix}.zip`;
+                } else {
+                    // Fallback: blog_photos_년월일_순서.zip
+                    zipName = `blog_photos_${dateStr}${sequentialSuffix}.zip`;
+                }
                 
                 downloadBlob(content, zipName);
                 
