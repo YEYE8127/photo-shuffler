@@ -65,15 +65,23 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <!-- Category Setting Panel -->
-      <div class="lg:col-span-2 bg-gray-900 rounded-xl p-4 sm:p-6 border border-gray-800 flex flex-col h-[80vh]">
+      <!-- 'h-[80vh]'를 'lg:h-[80vh]'로 변경하여 모바일에서 높이 제한 해제 -->
+      <div class="lg:col-span-2 bg-gray-900 rounded-xl p-4 sm:p-6 border border-gray-800 flex flex-col min-h-[50vh] lg:h-[80vh]">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
           <div class="flex items-center gap-3 mb-3 sm:mb-0">
             <h2 class="text-xl font-bold text-emerald-400">카테고리 설정</h2>
             <button onclick="resetCategories()" class="text-xs text-gray-500 hover:text-red-400 underline decoration-dotted">초기화</button>
           </div>
-          <button onclick="addCategory()" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-lg text-sm font-semibold transition flex items-center gap-2">
-            <span>+</span> 카테고리 추가
-          </button>
+          <!-- START MODIFICATION: 카테고리 개수 표시로 변경 -->
+          <div class="flex items-center gap-4"> 
+            <span id="folderCountDisplay" class="text-sm font-semibold text-gray-400">
+              <!-- Content updated by JS: 총 카테고리: [N]개 -->
+            </span>
+            <button onclick="addCategory()" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-lg text-sm font-semibold transition flex items-center gap-2">
+              <span>+</span> 카테고리 추가
+            </button>
+          </div>
+          <!-- END MODIFICATION -->
         </div>
         
         <div id="categories" class="space-y-4 overflow-y-auto scrollbar-thin pr-2 flex-1">
@@ -94,7 +102,7 @@
              <p class="text-xs text-gray-500 mt-1 text-emerald-400">
                 입력 시 폴더명: <b>업체명01</b>, 업체명02...<br>
                 <!-- UPDATED HINT TEXT -->
-                <span class="text-gray-400">파일명: <b>년월일_시폴더순서사진순서.jpg</b> (자동변환)</span>
+                <span class="text-gray-400">파일명: <b>년월일_시분사진순서.jpg</b> (자동변환)</span>
              </p>
           </div>
 
@@ -139,8 +147,8 @@
               <span id="totalCats" class="text-emerald-400 font-bold text-lg">0</span>
           </div>
           <div class="flex justify-between items-center">
-              <span class="text-gray-400">총 업로드 이미지</span>
-              <span id="totalImgs" class="text-white font-bold text-lg">0</span>
+            <span class="text-gray-400">총 업로드 이미지</span>
+            <span id="totalImgs" class="text-white font-bold text-lg">0</span>
           </div>
           <div id="warningBox" class="hidden bg-amber-900/30 border border-amber-700/50 p-3 rounded text-amber-200 text-xs mt-3 leading-relaxed"></div>
         </div>
@@ -338,10 +346,10 @@ function renderCategories() {
                     <div class="bg-gray-700 px-2 py-1 rounded text-emerald-400 font-mono text-sm font-bold min-w-[2rem] text-center">
                         ${String(idx + 1).padStart(2, '0')}
                     </div>
-                    <!-- Category Name Input -->
+                    <!-- Category Name Input (w-48 -> flex-1 min-w-0 for responsiveness) -->
                     <input type="text" value="${cat.name}" 
                         onchange="updateCategoryName(${cat.id}, this.value)"
-                        class="w-48 px-3 py-1 bg-gray-900 border border-gray-700 rounded text-sm text-white focus:border-emerald-500 focus:outline-none transition" placeholder="카테고리명">
+                        class="flex-1 min-w-0 px-3 py-1 bg-gray-900 border border-gray-700 rounded text-sm text-white focus:border-emerald-500 focus:outline-none transition" placeholder="카테고리명">
                 </div>
                 <!-- Delete Button -->
                 <button onclick="removeCategory(${cat.id})" class="text-gray-600 hover:text-red-400 transition p-1" title="삭제" aria-label="Delete Category">✕</button>
@@ -457,6 +465,12 @@ function updateSummary() {
     document.getElementById('totalCats').textContent = totalCats;
     document.getElementById('totalImgs').textContent = totalImgs;
     
+    // MODIFIED: 카테고리 개수를 표시하도록 변경
+    const topSummaryDisplay = document.getElementById('folderCountDisplay');
+    if (topSummaryDisplay) {
+        topSummaryDisplay.innerHTML = `총 카테고리: <span class="text-emerald-400">${totalCats}</span>개`;
+    }
+
     let warnings = [];
     
     categories.forEach(cat => {
@@ -507,7 +521,7 @@ function downloadBlob(blob, filename) {
 }
 
 // ============================================
-//    메타데이터 제거 (Canvas Re-encoding)
+//     메타데이터 제거 (Canvas Re-encoding)
 // ============================================
 
 async function cleanImage(file) {
@@ -552,7 +566,7 @@ async function cleanImage(file) {
 }
 
 // ============================================
-//    ZIP 생성 로직 (배치 처리 + 이름 변경)
+//     ZIP 생성 로직 (배치 처리 + 이름 변경)
 // ============================================
 async function generateZip() {
     const folderCount = parseInt(document.getElementById('folderCount').value);
@@ -599,7 +613,8 @@ async function generateZip() {
             const year = now.getFullYear();
             const month = String(now.getMonth() + 1).padStart(2, '0');
             const day = String(now.getDate()).padStart(2, '0');
-            const hourPart = String(now.getHours()).padStart(2, '0'); // HH
+            const hourPart = String(now.getHours()).padStart(2, '0'); // HH (시)
+            const minutePart = String(now.getMinutes()).padStart(2, '0'); // MM (분)
             
             // 파일명에 사용될 YYYYMMDD
             const datePart = `${year}${month}${day}`; 
@@ -680,9 +695,9 @@ async function generateZip() {
                     if(folder.files.length > 0) {
                         const folderZip = zip.folder(folder.name);
                         
-                        // 현재 폴더 번호 (FF) 계산
-                        const actualFolderIndex = i + fIdx + 1;
-                        const paddedFolderIndex = String(actualFolderIndex).padStart(2, '0'); // FF
+                        // 현재 폴더 번호 (FF) 계산 (더 이상 파일명에 사용되지 않음)
+                        // const actualFolderIndex = i + fIdx + 1;
+                        // const paddedFolderIndex = String(actualFolderIndex).padStart(2, '0'); // FF
                         
                         // 폴더 내 파일 순회하며 이름 변경 및 추가
                         for (let fileIndex = 0; fileIndex < folder.files.length; fileIndex++) {
@@ -693,12 +708,12 @@ async function generateZip() {
                                 fileData = await cleanImage(item.file);
                             }
 
-                            // 파일명: YYYYMMDD_HHFFPP.ext (요청사항 반영)
+                            // 파일명: YYYYMMDD_HHMMPP.ext (요청사항 반영)
                             const ext = item.fileName.split('.').pop();
                             const seq = String(fileIndex + 1).padStart(2, '0'); // PP (2자리 순서)
                             
-                            // YYYYMMDD + _ + HH + FF + PP + .ext
-                            const indexPart = `${hourPart}${paddedFolderIndex}${seq}`; // HHFFPP
+                            // YYYYMMDD + _ + HH + MM + PP + .ext
+                            const indexPart = `${hourPart}${minutePart}${seq}`; // HHMMSS (using PP as SS for sequence)
                             const finalName = `${datePart}_${indexPart}.${ext}`; 
 
                             // 순차적인 파일 정렬을 위해 메타데이터 시간(ZIP date)을 1초씩 증가
