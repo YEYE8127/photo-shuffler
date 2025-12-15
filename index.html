@@ -42,6 +42,16 @@
             animation: spin 1s linear infinite;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* START: 카테고리 추가 버튼 액티브 상태 개선 */
+        .category-control-btn {
+            transition: background-color 0.1s, transform 0.1s; /* 전환 속도를 빠르게 조정 */
+        }
+        .category-control-btn:active {
+            background-color: #4b5563; /* gray-600 */
+            transform: translateY(1px); /* 클릭 시 눌리는 효과 명시 */
+        }
+        /* END: 카테고리 추가 버튼 액티브 상태 개선 */
     </style>
 </head>
 <body class="text-gray-100 min-h-screen flex flex-col">
@@ -59,29 +69,30 @@
 <div class="flex-1 p-4 sm:p-6">
   <div class="max-w-7xl mx-auto">
     <div class="text-center mb-8">
-      <h1 class="text-4xl font-extrabold neon-text mb-2">블로그 사진 정리 시스템</h1>
+      <h1 class="4xl font-extrabold neon-text mb-2">블로그 사진 정리 시스템</h1>
       <p class="text-gray-400">V3.0 (파일명 자동변환 + 무제한 모드)</p>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <!-- Category Setting Panel -->
-      <!-- 'h-[80vh]'를 'lg:h-[80vh]'로 변경하여 모바일에서 높이 제한 해제 -->
+      <!-- 모바일 환경에서 높이 제한 해제 -->
       <div class="lg:col-span-2 bg-gray-900 rounded-xl p-4 sm:p-6 border border-gray-800 flex flex-col min-h-[50vh] lg:h-[80vh]">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
           <div class="flex items-center gap-3 mb-3 sm:mb-0">
             <h2 class="text-xl font-bold text-emerald-400">카테고리 설정</h2>
-            <button onclick="resetCategories()" class="text-xs text-gray-500 hover:text-red-400 underline decoration-dotted">초기화</button>
+            <!-- category-control-btn 클래스 추가 -->
+            <button onclick="resetCategories()" class="text-xs text-gray-500 hover:text-red-400 underline decoration-dotted category-control-btn">초기화</button>
           </div>
-          <!-- START MODIFICATION: 카테고리 개수 표시로 변경 -->
+          <!-- 카테고리 개수 표시 -->
           <div class="flex items-center gap-4"> 
             <span id="folderCountDisplay" class="text-sm font-semibold text-gray-400">
               <!-- Content updated by JS: 총 카테고리: [N]개 -->
             </span>
-            <button onclick="addCategory()" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-lg text-sm font-semibold transition flex items-center gap-2">
+            <!-- category-control-btn 클래스 추가 -->
+            <button onclick="addCategory()" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-lg text-sm font-semibold transition flex items-center gap-2 category-control-btn">
               <span>+</span> 카테고리 추가
             </button>
           </div>
-          <!-- END MODIFICATION -->
         </div>
         
         <div id="categories" class="space-y-4 overflow-y-auto scrollbar-thin pr-2 flex-1">
@@ -229,9 +240,9 @@ function addCategory(name = '', shouldRender = true) {
     const cat = {
         id,
         name: name || `${id}`,
-        mode: 'required', // required | probability
+        // mode: 'required', // REMOVED
         requiredCount: 1,
-        probabilityN: 20,
+        // probabilityN: 20, // REMOVED
         files: []
     };
     categories.push(cat);
@@ -240,6 +251,13 @@ function addCategory(name = '', shouldRender = true) {
         renderCategories();
     }
 }
+
+// REMOVED: function removeCategory(id) (Logic for deletion is kept)
+
+// function moveCategory(index, direction) (Kept as is)
+
+// REMOVED: function updateCategoryMode(id, mode)
+// REMOVED: function updateProbabilityN(id, n)
 
 function removeCategory(id) {
      // 커스텀 모달 UI 사용
@@ -286,9 +304,9 @@ function saveSettings() {
         removeMetadata: document.getElementById('removeMetadata').checked,
         categories: categories.map(c => ({
             name: c.name,
-            mode: c.mode,
+            // mode: c.mode, // REMOVED
             requiredCount: c.requiredCount,
-            probabilityN: c.probabilityN
+            // probabilityN: c.probabilityN // REMOVED
         }))
     };
     localStorage.setItem('blogShufflerSettingsV3', JSON.stringify(settings));
@@ -308,9 +326,9 @@ function loadSettings() {
                 categories = parsed.categories.map((c, idx) => ({
                     id: nextId++,
                     name: c.name,
-                    mode: c.mode || 'required',
+                    // mode: c.mode || 'required', // REMOVED
                     requiredCount: c.requiredCount || 1,
-                    probabilityN: c.probabilityN || 20,
+                    // probabilityN: c.probabilityN || 20, // REMOVED
                     files: []
                 }));
             }
@@ -334,8 +352,11 @@ function renderCategories() {
     container.innerHTML = categories.map((cat, idx) => `
         <div class="category-box bg-gray-800 rounded-xl p-4 relative group" data-id="${cat.id}">
             
-            <div class="flex justify-between items-center mb-3">
-                <div class="flex items-center gap-2">
+            <!-- 모바일 레이아웃 개선: sm:flex-row를 추가하여 좁은 화면에서는 세로로 분리되도록 조정 -->
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-2 sm:gap-0">
+                
+                <!-- 왼쪽 섹션: 이동 버튼, 번호 패드, 이름 입력창 -->
+                <div class="flex items-center gap-2 w-full sm:w-auto">
                     <div class="flex flex-col gap-0.5 mr-1">
                         <!-- Move Up Button -->
                         <button onclick="moveCategory(${idx}, -1)" class="text-gray-600 hover:text-emerald-400 leading-none ${idx === 0 ? 'invisible' : ''}" aria-label="Move Up">▲</button>
@@ -346,37 +367,23 @@ function renderCategories() {
                     <div class="bg-gray-700 px-2 py-1 rounded text-emerald-400 font-mono text-sm font-bold min-w-[2rem] text-center">
                         ${String(idx + 1).padStart(2, '0')}
                     </div>
-                    <!-- Category Name Input (w-48 -> flex-1 min-w-0 for responsiveness) -->
+                    <!-- Category Name Input (flex-1: 남은 공간 차지) -->
                     <input type="text" value="${cat.name}" 
                         onchange="updateCategoryName(${cat.id}, this.value)"
                         class="flex-1 min-w-0 px-3 py-1 bg-gray-900 border border-gray-700 rounded text-sm text-white focus:border-emerald-500 focus:outline-none transition" placeholder="카테고리명">
                 </div>
-                <!-- Delete Button -->
-                <button onclick="removeCategory(${cat.id})" class="text-gray-600 hover:text-red-400 transition p-1" title="삭제" aria-label="Delete Category">✕</button>
+                
+                <!-- 오른쪽 섹션: 삭제 버튼 -->
+                <button onclick="removeCategory(${cat.id})" class="text-gray-600 hover:text-red-400 transition p-1 sm:self-center" title="삭제" aria-label="Delete Category">✕</button>
             </div>
 
-            <!-- Mode Setting -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                <div>
-                    <select onchange="updateCategoryMode(${cat.id}, this.value)" 
-                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-xs text-gray-200 focus:border-emerald-500 focus:outline-none">
-                        <option value="required" ${cat.mode === 'required' ? 'selected' : ''}>[모드 A] 폴더마다 필수 포함</option>
-                        <option value="probability" ${cat.mode === 'probability' ? 'selected' : ''}>[모드 B] N번째 폴더마다 포함</option>
-                    </select>
-                </div>
-                <div class="flex items-center gap-2">
-                    ${cat.mode === 'required' ? `
-                        <span class="text-xs text-gray-400 whitespace-nowrap">개수:</span>
-                        <input type="number" value="${cat.requiredCount}" min="1" max="50"
-                            onchange="updateRequiredCount(${cat.id}, this.value)"
-                            class="w-full px-3 py-1.5 bg-gray-900 border border-gray-600 rounded text-sm text-center focus:border-emerald-500" aria-label="Required Count">
-                    ` : `
-                        <span class="text-xs text-gray-400 whitespace-nowrap">간격 (N):</span>
-                        <input type="number" value="${cat.probabilityN}" min="1" max="1000"
-                            onchange="updateProbabilityN(${cat.id}, this.value)"
-                            class="w-full px-3 py-1.5 bg-gray-900 border border-gray-600 rounded text-sm text-center focus:border-emerald-500" aria-label="Probability N">
-                    `}
-                </div>
+            <!-- Mode Setting (Simplified to only Random Photos) -->
+            <div class="flex items-center gap-2 mb-3">
+                <span class="bg-emerald-700 px-3 py-1 rounded text-xs font-bold whitespace-nowrap">랜덤 사진</span>
+                <span class="text-xs text-gray-400 whitespace-nowrap">폴더 당 개수:</span>
+                <input type="number" value="${cat.requiredCount}" min="1" max="50"
+                    onchange="updateRequiredCount(${cat.id}, this.value)"
+                    class="w-full px-3 py-1.5 bg-gray-900 border border-gray-600 rounded text-sm text-center focus:border-emerald-500" aria-label="Required Count">
             </div>
 
             <!-- File Drop/Select Area -->
@@ -408,19 +415,11 @@ function updateCategoryName(id, name) {
     if (cat) { cat.name = name; saveSettings(); }
 }
 
-function updateCategoryMode(id, mode) {
-    const cat = categories.find(c => c.id === id);
-    if (cat) { cat.mode = mode; saveSettings(); renderCategories(); }
-}
+// updateCategoryMode와 updateProbabilityN는 제거됨
 
 function updateRequiredCount(id, count) {
     const cat = categories.find(c => c.id === id);
     if (cat) { cat.requiredCount = parseInt(count); saveSettings(); updateSummary(); }
-}
-
-function updateProbabilityN(id, n) {
-    const cat = categories.find(c => c.id === id);
-    if (cat) { cat.probabilityN = parseInt(n); saveSettings(); updateSummary(); }
 }
 
 // --- 파일 처리 ---
@@ -474,14 +473,13 @@ function updateSummary() {
     let warnings = [];
     
     categories.forEach(cat => {
-        if (cat.mode === 'required') {
-            const needed = folderCount * cat.requiredCount;
-            if (cat.files.length < needed) {
-                const diff = needed - cat.files.length;
-                // Check if duplication is allowed to change warning message
-                const action = document.getElementById('allowDuplicate').checked ? '중복 사용 예정' : `${diff}장 부족`;
-                warnings.push(`• <b>${cat.name}</b>: ${action} (${cat.files.length}/${needed})`);
-            }
+        // 기존의 cat.mode 검사 로직 제거 (이제 required 모드만 있음)
+        const needed = folderCount * cat.requiredCount;
+        if (cat.files.length < needed) {
+            const diff = needed - cat.files.length;
+            // Check if duplication is allowed to change warning message
+            const action = document.getElementById('allowDuplicate').checked ? '중복 사용 예정' : `${diff}장 부족`;
+            warnings.push(`• <b>${cat.name} (랜덤 사진)</b>: ${action} (${cat.files.length}/${needed})`);
         }
     });
     
@@ -631,44 +629,26 @@ async function generateZip() {
                 files: []
             }));
 
-            // 카테고리별 분배 로직
+            // 카테고리별 분배 로직 (이제 required mode만 사용)
             for (let catIdx = 0; catIdx < categories.length; catIdx++) {
                 const cat = categories[catIdx];
                 if (cat.files.length === 0) continue;
 
                 const shuffled = shuffle(cat.files);
                 
-                if (cat.mode === 'required') {
-                    for (let folderIdx = 0; folderIdx < folderCount; folderIdx++) {
-                        for (let i = 0; i < cat.requiredCount; i++) {
-                            const globalIndex = folderIdx * cat.requiredCount + i;
-                            let file;
-                            if (globalIndex < shuffled.length) {
-                                file = shuffled[globalIndex];
-                            } else if (allowDuplicate) {
-                                file = shuffled[globalIndex % shuffled.length];
-                            } else {
-                                continue;
-                            }
-                            allFolders[folderIdx].files.push({ file, fileName: file.name });
+                // Mode A (랜덤 사진) 로직만 남김
+                for (let folderIdx = 0; folderIdx < folderCount; folderIdx++) {
+                    for (let i = 0; i < cat.requiredCount; i++) {
+                        const globalIndex = folderIdx * cat.requiredCount + i;
+                        let file;
+                        if (globalIndex < shuffled.length) {
+                            file = shuffled[globalIndex];
+                        } else if (allowDuplicate) {
+                            file = shuffled[globalIndex % shuffled.length];
+                        } else {
+                            continue;
                         }
-                    }
-                } else {
-                    const interval = cat.probabilityN;
-                    let usedCount = 0;
-                    for (let folderIdx = 0; folderIdx < folderCount; folderIdx++) {
-                        if ((folderIdx + 1) % interval === 0) {
-                            let file;
-                            if (usedCount < shuffled.length) {
-                                 file = shuffled[usedCount];
-                            } else if (allowDuplicate) {
-                                 file = shuffled[usedCount % shuffled.length];
-                            } else {
-                                continue;
-                            }
-                            usedCount++;
-                            allFolders[folderIdx].files.push({ file, fileName: file.name });
-                        }
+                        allFolders[folderIdx].files.push({ file, fileName: file.name });
                     }
                 }
             }
